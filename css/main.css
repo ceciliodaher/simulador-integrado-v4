@@ -1673,7 +1673,7 @@ button:hover {
 .detail-table,
 .detalhamento-impostos,
 .tabela-evolutiva-container {
-    display: block !important;
+    /* display: block !important; */ /* Controlled by JS now */
     visibility: visible !important;
     opacity: 1 !important;
 }

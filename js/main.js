@@ -2100,6 +2100,9 @@ function obterValorDePropertyPath(objeto, caminho) {
  * @param {Object} resultado - Resultados da simulação
  */
 function atualizarTabelaTransicao(resultado) {
+    console.log('atualizarTabelaTransicao - resultado:', resultado);
+    console.log('atualizarTabelaTransicao - resultado.projecaoTemporal.resultadosAnuais:', resultado?.projecaoTemporal?.resultadosAnuais);
+
     const tabela = document.getElementById('tabela-transicao');
     if (!tabela || !resultado.projecaoTemporal?.resultadosAnuais) return;
     
@@ -2115,6 +2118,8 @@ function atualizarTabelaTransicao(resultado) {
     
     Object.keys(resultado.projecaoTemporal.resultadosAnuais).sort().forEach(ano => {
         const dadosAno = resultado.projecaoTemporal.resultadosAnuais[ano];
+        console.log(`atualizarTabelaTransicao - Processando ano: ${ano}`, dadosAno);
+
         const percIVA = cronograma[ano] || 0;
         const percAtual = 1 - percIVA;
         
@@ -2124,6 +2129,16 @@ function atualizarTabelaTransicao(resultado) {
         
         const faturamento = resultado.memoriaCalculo?.dadosEntrada?.empresa?.faturamento || 0;
         const aliquotaEfetiva = faturamento > 0 ? (totalImpostos / faturamento) * 100 : 0;
+
+        console.log(`atualizarTabelaTransicao - Calculos para ${ano}:`, {
+            percIVA,
+            percAtual,
+            tributosAtuais,
+            ivaTotal,
+            totalImpostos,
+            faturamento,
+            aliquotaEfetiva
+        });
         
         const linha = document.createElement('tr');
         linha.innerHTML = `
