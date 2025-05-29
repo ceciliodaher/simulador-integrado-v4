@@ -1834,3 +1834,57 @@ button:hover {
 #detalhamento-impostos-transicao.result-card[style*="display: none"] {
     display: block !important;
 }
+
+/* Estilos para tabela de transição */
+.transition-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 14px;
+}
+
+.transition-table th,
+.transition-table td {
+    padding: 12px 8px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+
+.transition-table th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    color: #495057;
+}
+
+.transition-table tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.transition-table tbody tr:hover {
+    background-color: #e9ecef;
+}
+
+.valor-positivo {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.valor-negativo {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+#transicao-tributaria {
+    margin-top: 20px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    background-color: #fff;
+}
+
+#transicao-tributaria h4 {
+    margin-bottom: 15px;
+    color: #495057;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 8px;
+}
