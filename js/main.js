@@ -903,66 +903,6 @@ function inicializarEventosPrincipais() {
         };
     }
 
-    /**
-     * Integra dados do SPED na estrutura canônica do DataManager
-     * @param {Object} dadosFormulario - Dados do formulário em estrutura aninhada
-     * @returns {Object} Dados integrados com priorização do SPED
-     */
-    function integrarDadosSpedNaEstruturaPadrao(dadosFormulario) {
-        const dadosSped = obterDadosSpedPrioritarios();
-
-        if (!dadosSped) {
-            return dadosFormulario; // Retorna dados originais se não há SPED
-        }
-
-        // Criar cópia profunda para não modificar o original
-        const dadosIntegrados = JSON.parse(JSON.stringify(dadosFormulario));
-
-        // Adicionar seção específica para dados do SPED
-        dadosIntegrados.dadosSpedImportados = {
-            composicaoTributaria: {
-                debitos: dadosSped.debitos,
-                creditos: dadosSped.creditos,
-                aliquotasEfetivas: dadosSped.aliquotasEfetivas,
-                totalDebitos: dadosSped.totalDebitos,
-                totalCreditos: dadosSped.totalCreditos
-            },
-            origemDados: 'sped',
-            timestampImportacao: new Date().toISOString()
-        };
-
-        // Atualizar parâmetros fiscais baseados no SPED
-        if (!dadosIntegrados.parametrosFiscais) {
-            dadosIntegrados.parametrosFiscais = {};
-        }
-
-        // Adicionar composicaoTributaria se não existir
-        if (!dadosIntegrados.parametrosFiscais.composicaoTributaria) {
-            dadosIntegrados.parametrosFiscais.composicaoTributaria = {
-                debitos: { ...dadosSped.debitos },
-                creditos: { ...dadosSped.creditos },
-                aliquotasEfetivas: { ...dadosSped.aliquotasEfetivas }
-            };
-        }
-
-        // Sobrescrever também os créditos padrão para garantir consistência
-        if (!dadosIntegrados.parametrosFiscais.creditos) {
-            dadosIntegrados.parametrosFiscais.creditos = {};
-        }
-
-        // Copiar créditos da estrutura SPED para a estrutura padrão
-        dadosIntegrados.parametrosFiscais.creditos.pis = dadosSped.creditos.pis;
-        dadosIntegrados.parametrosFiscais.creditos.cofins = dadosSped.creditos.cofins;
-        dadosIntegrados.parametrosFiscais.creditos.icms = dadosSped.creditos.icms;
-        dadosIntegrados.parametrosFiscais.creditos.ipi = dadosSped.creditos.ipi;
-
-        // Adicionar flag indicando que há dados do SPED
-        dadosIntegrados.parametrosFiscais.temDadosSped = true;
-        dadosIntegrados.parametrosFiscais.aliquotaEfetivaTotal = dadosSped.aliquotasEfetivas.total / 100;
-
-        return dadosIntegrados;
-    }
-
     // Função auxiliar para gerar tabela de composição tributária
     function gerarTabelaComposicao(composicao) {
         const { debitos, creditos, aliquotasEfetivas } = composicao;
@@ -1408,22 +1348,42 @@ function atualizarInterface(resultado) {
         document.getElementById('total-necessidade-giro').textContent = formatarMoeda(dadosAno.totalNecessidadeGiro);
         document.getElementById('custo-financeiro-total').textContent = formatarMoeda(dadosAno.custoFinanceiroTotal);
         
-        // NOVA FUNCIONALIDADE: Atualizar tabela de transição
+        // OU, de forma ainda mais simples, SUBSTITUIR por:
+        // Forçar exibição das seções de transição
+        document.getElementById('transicao-tributaria')?.style.setProperty('display', 'block');
+        document.getElementById('transicao-tributaria')?.style.setProperty('visibility', 'visible');
+        document.getElementById('detalhamento-impostos-transicao')?.style.setProperty('display', 'block');
+        document.getElementById('detalhamento-impostos-transicao')?.style.setProperty('visibility', 'visible');
+        
+        // Atualizar tabela de transição com dados válidos
         atualizarTabelaTransicao(resultado);
         
-        // NOVA FUNCIONALIDADE: Atualizar débitos, créditos e alíquotas efetivas
+        // Atualizar composição tributária
         atualizarComposicaoTributaria(resultado, anoSelecionado);
+
+        // Forçar exibição das seções de transição
+        document.getElementById('transicao-tributaria')?.style.setProperty('display', 'block');
+        document.getElementById('transicao-tributaria')?.style.setProperty('visibility', 'visible');
+        document.getElementById('detalhamento-impostos-transicao')?.style.setProperty('display', 'block');
+        document.getElementById('detalhamento-impostos-transicao')?.style.setProperty('visibility', 'visible');
+
+        // Atualizar tabela de transição com dados válidos
+        atualizarTabelaTransicao(resultado);
+
+        // Renderizar gráficos de detalhamento após um pequeno delay
+        setTimeout(() => {
+            renderizarGraficosDetalhamento(resultado);
+        }, 500);
+        
+        // Renderizar gráficos de detalhamento após um pequeno delay
+        setTimeout(() => {
+            renderizarGraficosDetalhamento(resultado);
+        }, 500);
         
         const divResultadosDetalhados = document.getElementById('resultados-detalhados');
         if (divResultadosDetalhados) {
             divResultadosDetalhados.style.display = 'block';
-        }
-        
-        // Mostrar seções de transição
-        const divTransicao = document.getElementById('transicao-tributaria');
-        const divDetalhamento = document.getElementById('detalhamento-impostos-transicao');
-        if (divTransicao) divTransicao.style.display = 'block';
-        if (divDetalhamento) divDetalhamento.style.display = 'block';
+        }                
         
         window.memoriaCalculoSimulacao = resultado.memoriaCalculo;
         
@@ -1440,6 +1400,209 @@ function atualizarInterface(resultado) {
         console.error('Erro ao atualizar interface:', erro);
         alert('Ocorreu um erro ao exibir os resultados: ' + erro.message);
     }
+}
+
+// ADICIONAR esta nova função:
+function renderizarGraficosDetalhamento(resultado) {
+    console.log('Renderizando gráficos de detalhamento...');
+    
+    // Verificar se Chart.js está disponível
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js não está disponível');
+        return;
+    }
+    
+    const cronograma = {
+        2026: 0.10, 2027: 0.25, 2028: 0.40, 2029: 0.55,
+        2030: 0.70, 2031: 0.85, 2032: 0.95, 2033: 1.00
+    };
+    
+    const anos = Object.keys(cronograma);
+    const faturamento = resultado.memoriaCalculo?.dadosEntrada?.empresa?.faturamento || 1000000;
+    
+    // Dados para gráfico PIS/COFINS
+    const dadosPisCofins = anos.map(ano => {
+        const percIVA = cronograma[ano];
+        const percAtual = 1 - percIVA;
+        return {
+            ano: ano,
+            atual: (faturamento * 0.0925 * percAtual), // PIS+COFINS estimado
+            iva: (faturamento * 0.088 * percIVA) // CBS estimado
+        };
+    });
+    
+    // Renderizar gráfico PIS/COFINS
+    const ctxPisCofins = document.getElementById('grafico-evolucao-pis-cofins');
+    if (ctxPisCofins) {
+        new Chart(ctxPisCofins, {
+            type: 'line',
+            data: {
+                labels: anos,
+                datasets: [{
+                    label: 'PIS/COFINS Atual',
+                    data: dadosPisCofins.map(d => d.atual),
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)'
+                }, {
+                    label: 'CBS (IVA)',
+                    data: dadosPisCofins.map(d => d.iva),
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Evolução PIS/COFINS → CBS'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Renderizar gráfico ICMS
+    const ctxICMS = document.getElementById('grafico-evolucao-icms');
+    if (ctxICMS) {
+        new Chart(ctxICMS, {
+            type: 'line',
+            data: {
+                labels: anos,
+                datasets: [{
+                    label: 'ICMS Atual',
+                    data: anos.map(ano => {
+                        const percAtual = 1 - cronograma[ano];
+                        return (faturamento * 0.18 * percAtual);
+                    }),
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)'
+                }, {
+                    label: 'IBS (IVA)',
+                    data: anos.map(ano => {
+                        const percIVA = cronograma[ano];
+                        return (faturamento * 0.177 * percIVA);
+                    }),
+                    borderColor: 'rgb(153, 102, 255)',
+                    backgroundColor: 'rgba(153, 102, 255, 0.2)'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Evolução ICMS → IBS'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Renderizar gráfico IPI
+    const ctxIPI = document.getElementById('grafico-evolucao-ipi');
+    if (ctxIPI) {
+        new Chart(ctxIPI, {
+            type: 'bar',
+            data: {
+                labels: anos,
+                datasets: [{
+                    label: 'IPI Atual',
+                    data: anos.map(ano => {
+                        const percAtual = 1 - cronograma[ano];
+                        return (faturamento * 0.10 * percAtual);
+                    }),
+                    backgroundColor: 'rgba(255, 206, 86, 0.7)',
+                    borderColor: 'rgba(255, 206, 86, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Evolução IPI'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Renderizar gráfico Total
+    const ctxTotal = document.getElementById('grafico-evolucao-total');
+    if (ctxTotal) {
+        new Chart(ctxTotal, {
+            type: 'bar',
+            data: {
+                labels: anos,
+                datasets: [{
+                    label: 'Total de Impostos',
+                    data: anos.map(ano => {
+                        const percIVA = cronograma[ano];
+                        const percAtual = 1 - percIVA;
+                        const sistemaAtual = faturamento * 0.265 * percAtual; // Alíquota média atual
+                        const sistemaIVA = faturamento * 0.265 * percIVA; // IVA equivalente
+                        return sistemaAtual + sistemaIVA;
+                    }),
+                    backgroundColor: '#2ecc71',
+                    borderColor: '#27ae60',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Total de Impostos Durante Transição'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    console.log('Gráficos de detalhamento renderizados');
 }
 
 /**
@@ -1885,6 +2048,164 @@ function inicializarRepository() {
 }
 
 /**
+ * Integra dados do SPED na estrutura canônica do DataManager
+ * @param {Object} dadosFormulario - Dados do formulário em estrutura aninhada
+ * @returns {Object} Dados integrados com priorização do SPED
+ */
+function integrarDadosSpedNaEstruturaPadrao(dadosFormulario) {
+    const dadosSped = obterDadosSpedPrioritarios();
+    
+    if (!dadosSped) {
+        return dadosFormulario; // Retorna dados originais se não há SPED
+    }
+
+    // Criar cópia profunda para não modificar o original
+    const dadosIntegrados = JSON.parse(JSON.stringify(dadosFormulario));
+
+    // Adicionar seção específica para dados do SPED
+    dadosIntegrados.dadosSpedImportados = {
+        composicaoTributaria: {
+            debitos: dadosSped.debitos,
+            creditos: dadosSped.creditos,
+            aliquotasEfetivas: dadosSped.aliquotasEfetivas,
+            totalDebitos: dadosSped.totalDebitos,
+            totalCreditos: dadosSped.totalCreditos
+        },
+        origemDados: 'sped',
+        timestampImportacao: new Date().toISOString()
+    };
+
+    // Atualizar parâmetros fiscais baseados no SPED
+    if (!dadosIntegrados.parametrosFiscais) {
+        dadosIntegrados.parametrosFiscais = {};
+    }
+
+    // Adicionar composicaoTributaria se não existir
+    if (!dadosIntegrados.parametrosFiscais.composicaoTributaria) {
+        dadosIntegrados.parametrosFiscais.composicaoTributaria = {
+            debitos: { ...dadosSped.debitos },
+            creditos: { ...dadosSped.creditos },
+            aliquotasEfetivas: { ...dadosSped.aliquotasEfetivas }
+        };
+    }
+
+    // Sobrescrever também os créditos padrão para garantir consistência
+    if (!dadosIntegrados.parametrosFiscais.creditos) {
+        dadosIntegrados.parametrosFiscais.creditos = {};
+    }
+
+    // Copiar créditos da estrutura SPED para a estrutura padrão
+    dadosIntegrados.parametrosFiscais.creditos.pis = dadosSped.creditos.pis;
+    dadosIntegrados.parametrosFiscais.creditos.cofins = dadosSped.creditos.cofins;
+    dadosIntegrados.parametrosFiscais.creditos.icms = dadosSped.creditos.icms;
+    dadosIntegrados.parametrosFiscais.creditos.ipi = dadosSped.creditos.ipi;
+
+    // Adicionar flag indicando que há dados do SPED
+    dadosIntegrados.parametrosFiscais.temDadosSped = true;
+    dadosIntegrados.parametrosFiscais.aliquotaEfetivaTotal = dadosSped.aliquotasEfetivas.total / 100;
+
+    return dadosIntegrados;
+}
+
+/**
+ * Ajusta campos tributários com base no regime selecionado
+ * Esta função só é executada para interações manuais do usuário, não durante importação SPED
+ */
+function ajustarCamposTributarios() {
+    // Verificar se estamos em processo de importação SPED
+    if (window.processandoSPED) {
+        console.log('MAIN: Ajuste de campos tributários ignorado durante processamento SPED');
+        return;
+    }
+
+    const regime = document.getElementById('regime')?.value;
+    const pisCofinsRegime = document.getElementById('pis-cofins-regime')?.value;
+
+    // Atualizar interface usando a função central se disponível
+    if (typeof window.atualizarInterfaceTributaria === 'function') {
+        window.atualizarInterfaceTributaria(regime, pisCofinsRegime);
+    } else {
+        // Implementação básica como fallback
+        const camposSimples = document.getElementById('campos-simples');
+        const camposLucro = document.getElementById('campos-lucro');
+
+        // Ocultar todos os campos específicos primeiro
+        if (camposSimples) camposSimples.style.display = 'none';
+        if (camposLucro) camposLucro.style.display = 'none';
+
+        // Mostrar campos baseado no regime selecionado
+        switch(regime) {
+            case 'simples':
+                if (camposSimples) camposSimples.style.display = 'block';
+                break;
+            case 'presumido':
+            case 'real':
+                if (camposLucro) camposLucro.style.display = 'block';
+                break;
+        }
+    }
+
+    console.log('MAIN: Campos tributários ajustados para regime:', regime);
+}
+
+/**
+ * Ajusta campos de operação com base no tipo de empresa
+ */
+function ajustarCamposOperacao() {
+    const tipoEmpresa = document.getElementById('tipo-empresa')?.value;
+    const camposICMS = document.getElementById('campos-icms');
+    const camposIPI = document.getElementById('campos-ipi');
+    const camposISS = document.getElementById('campos-iss');
+
+    // Ocultar todos os campos primeiro
+    if (camposICMS) camposICMS.style.display = 'none';
+    if (camposIPI) camposIPI.style.display = 'none';
+    if (camposISS) camposISS.style.display = 'none';
+
+    // Mostrar campos baseado no tipo de empresa
+    switch(tipoEmpresa) {
+        case 'comercio':
+            if (camposICMS) camposICMS.style.display = 'block';
+            break;
+        case 'industria':
+            if (camposICMS) camposICMS.style.display = 'block';
+            if (camposIPI) camposIPI.style.display = 'block';
+            break;
+        case 'servicos':
+            if (camposISS) camposISS.style.display = 'block';
+            break;
+    }
+
+    console.log('MAIN: Campos de operação ajustados para tipo:', tipoEmpresa);
+}
+
+/**
+ * Adiciona notificação visual sobre uso de dados do SPED
+ */
+function adicionarNotificacaoSped() {
+    // Remover notificação anterior se existir
+    const notificacaoExistente = document.querySelector('.notificacao-sped');
+    if (notificacaoExistente) {
+        notificacaoExistente.remove();
+    }
+
+    // Criar nova notificação
+    const notificacao = document.createElement('div');
+    notificacao.className = 'alert alert-info notificacao-sped';
+    notificacao.innerHTML = `
+        <strong><i class="icon-info-circle"></i> Dados SPED Integrados:</strong> 
+        A simulação está utilizando dados tributários reais extraídos dos arquivos SPED importados, 
+        proporcionando maior precisão nos cálculos.
+    `;
+
+    // Inserir no início da área de resultados
+    const divResultados = document.getElementById('resultados');
+    if (divResultados) {
+        divResultados.insertBefore(notificacao, divResultados.firstChild);
+    }
+}
+
+/**
  * Observar mudanças de aba para atualizar dados quando necessário
  */
 function observarMudancasDeAba() {
@@ -2101,9 +2422,17 @@ function obterValorDePropertyPath(objeto, caminho) {
  */
 function atualizarTabelaTransicao(resultado) {
     const tabela = document.getElementById('tabela-transicao');
-    if (!tabela || !resultado.projecaoTemporal?.resultadosAnuais) return;
+    if (!tabela || !resultado.projecaoTemporal?.resultadosAnuais) {
+        console.warn('Tabela de transição ou dados não disponíveis');
+        return;
+    }
     
     const tbody = tabela.querySelector('tbody');
+    if (!tbody) {
+        console.error('Elemento tbody não encontrado na tabela de transição');
+        return;
+    }
+    
     tbody.innerHTML = '';
     
     const cronograma = {
@@ -2112,31 +2441,107 @@ function atualizarTabelaTransicao(resultado) {
     };
     
     const formatarMoeda = window.DataManager.formatarMoeda;
+    const anos = Object.keys(resultado.projecaoTemporal.resultadosAnuais).sort();
     
-    Object.keys(resultado.projecaoTemporal.resultadosAnuais).sort().forEach(ano => {
+    anos.forEach(ano => {
         const dadosAno = resultado.projecaoTemporal.resultadosAnuais[ano];
         const percIVA = cronograma[ano] || 0;
         const percAtual = 1 - percIVA;
         
-        const tributosAtuais = (dadosAno.resultadoAtual?.impostos?.total || 0) * percAtual;
-        const ivaTotal = (dadosAno.resultadoSplitPayment?.impostos?.total || 0) * percIVA;
-        const totalImpostos = tributosAtuais + ivaTotal;
-        
-        const faturamento = resultado.memoriaCalculo?.dadosEntrada?.empresa?.faturamento || 0;
-        const aliquotaEfetiva = faturamento > 0 ? (totalImpostos / faturamento) * 100 : 0;
+        // Obter valores com fallback seguro
+        const regimeAtual = dadosAno.resultadoAtual?.capitalGiroDisponivel || 0;
+        const ivaSemSplit = dadosAno.resultadoIVASemSplit?.capitalGiroDisponivel || regimeAtual;
+        const ivaComSplit = dadosAno.resultadoSplitPayment?.capitalGiroDisponivel || 0;
+        const impacto = ivaComSplit - regimeAtual;
         
         const linha = document.createElement('tr');
         linha.innerHTML = `
             <td>${ano}</td>
-            <td>${(percAtual * 100).toFixed(1)}%</td>
-            <td>${(percIVA * 100).toFixed(1)}%</td>
-            <td>${formatarMoeda(tributosAtuais)}</td>
-            <td>${formatarMoeda(ivaTotal)}</td>
-            <td>${formatarMoeda(totalImpostos)}</td>
-            <td>${aliquotaEfetiva.toFixed(2)}%</td>
+            <td>${formatarMoeda(regimeAtual)}</td>
+            <td>${formatarMoeda(ivaSemSplit)}</td>
+            <td>${formatarMoeda(ivaComSplit)}</td>
+            <td class="${impacto >= 0 ? 'valor-positivo' : 'valor-negativo'}">${formatarMoeda(impacto)}</td>
         `;
         tbody.appendChild(linha);
     });
+    
+    console.log('Tabela de transição atualizada com', anos.length, 'anos');
+}
+
+// ADICIONAR esta nova função:
+function renderizarGraficosDetalhamento(resultado) {
+    console.log('Renderizando gráficos de detalhamento...');
+    
+    // Verificar se Chart.js está disponível
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js não está disponível');
+        return;
+    }
+    
+    const cronograma = {
+        2026: 0.10, 2027: 0.25, 2028: 0.40, 2029: 0.55,
+        2030: 0.70, 2031: 0.85, 2032: 0.95, 2033: 1.00
+    };
+    
+    const anos = Object.keys(cronograma);
+    const faturamento = resultado.memoriaCalculo?.dadosEntrada?.empresa?.faturamento || 1000000;
+    
+    // Dados para gráfico PIS/COFINS
+    const dadosPisCofins = anos.map(ano => {
+        const percIVA = cronograma[ano];
+        const percAtual = 1 - percIVA;
+        return {
+            ano: ano,
+            atual: (faturamento * 0.0925 * percAtual), // PIS+COFINS estimado
+            iva: (faturamento * 0.088 * percIVA) // CBS estimado
+        };
+    });
+    
+    // Renderizar gráfico PIS/COFINS
+    const ctxPisCofins = document.getElementById('grafico-evolucao-pis-cofins');
+    if (ctxPisCofins) {
+        new Chart(ctxPisCofins, {
+            type: 'line',
+            data: {
+                labels: anos,
+                datasets: [{
+                    label: 'PIS/COFINS Atual',
+                    data: dadosPisCofins.map(d => d.atual),
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)'
+                }, {
+                    label: 'CBS (IVA)',
+                    data: dadosPisCofins.map(d => d.iva),
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Evolução PIS/COFINS → CBS'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'R$ ' + value.toLocaleString('pt-BR');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Criar gráficos similares para ICMS, IPI e Total seguindo o mesmo padrão
+    // (código similar para os outros gráficos...)
+    
+    console.log('Gráficos de detalhamento renderizados');
 }
 
 /**
@@ -2258,52 +2663,6 @@ function obterDadosSpedPrioritarios() {
         totalDebitos: extrairValorMonetario('total-debitos'),
         totalCreditos: extrairValorMonetario('total-creditos')
     };
-}
-
-/**
- * Integra dados do SPED na estrutura canônica do DataManager
- * @param {Object} dadosFormulario - Dados do formulário em estrutura aninhada
- * @returns {Object} Dados integrados com priorização do SPED
- */
-function integrarDadosSpedNaEstruturaPadrao(dadosFormulario) {
-    const dadosSped = obterDadosSpedPrioritarios();
-    
-    if (!dadosSped) {
-        return dadosFormulario; // Retorna dados originais se não há SPED
-    }
-
-    // Criar cópia profunda para não modificar o original
-    const dadosIntegrados = JSON.parse(JSON.stringify(dadosFormulario));
-
-    // Adicionar seção específica para dados do SPED
-    dadosIntegrados.dadosSpedImportados = {
-        composicaoTributaria: {
-            debitos: dadosSped.debitos,
-            creditos: dadosSped.creditos,
-            aliquotasEfetivas: dadosSped.aliquotasEfetivas,
-            totalDebitos: dadosSped.totalDebitos,
-            totalCreditos: dadosSped.totalCreditos
-        },
-        origemDados: 'sped',
-        timestampImportacao: new Date().toISOString()
-    };
-
-    // Atualizar parâmetros fiscais baseados no SPED
-    if (!dadosIntegrados.parametrosFiscais) {
-        dadosIntegrados.parametrosFiscais = {};
-    }
-
-    // Sobrescrever valores de débitos e créditos com dados do SPED
-    dadosIntegrados.parametrosFiscais.creditos = {
-        ...dadosIntegrados.parametrosFiscais.creditos,
-        ...dadosSped.creditos
-    };
-
-    // Adicionar flag indicando que há dados do SPED
-    dadosIntegrados.parametrosFiscais.temDadosSped = true;
-    dadosIntegrados.parametrosFiscais.aliquotaEfetivaTotal = dadosSped.aliquotasEfetivas.total / 100;
-
-    return dadosIntegrados;
 }
 
 // Função para mostrar o painel de resultados

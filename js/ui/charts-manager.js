@@ -74,6 +74,11 @@ window.ChartManager = (function() {
 
             // Renderizar gráfico de capital de giro
             renderizarGraficoCapitalGiro(resultados);
+            
+            renderizarGraficoSensibilidade(resultados);
+            
+            // Renderizar gráficos de detalhamento
+            renderizarGraficosDetalhamento(resultados);
 
             // Renderizar gráfico de projeção apenas se tivermos dados suficientes
             if (temProjecaoCompleta) {
@@ -104,6 +109,264 @@ window.ChartManager = (function() {
      * Renderizar gráfico de fluxo de caixa
      * @param {Object} resultados - Resultados da simulação
      */
+    
+    function renderizarGraficosDetalhamento(resultado) {
+        console.log('ChartManager: Renderizando gráficos de detalhamento');
+
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js não disponível');
+            return;
+        }
+
+        if (!resultado || !resultado.projecaoTemporal?.resultadosAnuais) {
+            console.warn('Dados insuficientes para gráficos de detalhamento');
+            return;
+        }
+
+        const cronograma = {
+            2026: 0.10, 2027: 0.25, 2028: 0.40, 2029: 0.55,
+            2030: 0.70, 2031: 0.85, 2032: 0.95, 2033: 1.00
+        };
+
+        const anos = Object.keys(cronograma);
+        const dadosEntrada = resultado.memoriaCalculo?.dadosEntrada || {};
+        const faturamento = dadosEntrada.empresa?.faturamento || 0;
+
+        // Renderizar gráfico PIS/COFINS
+        const ctxPisCofins = document.getElementById('grafico-evolucao-pis-cofins');
+        if (ctxPisCofins) {
+            // Destruir gráfico anterior se existir
+            if (_charts.pisCofins) {
+                _charts.pisCofins.destroy();
+            }
+
+            _charts.pisCofins = new Chart(ctxPisCofins, {
+                type: 'line',
+                data: {
+                    labels: anos,
+                    datasets: [{
+                        label: 'Sistema Atual',
+                        data: anos.map(ano => {
+                            const percAtual = 1 - cronograma[ano];
+                            return (faturamento * 0.095) * percAtual; // PIS+COFINS ~9.5%
+                        }),
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'IVA Dual',
+                        data: anos.map(ano => {
+                            const percIVA = cronograma[ano];
+                            return (faturamento * 0.088) * percIVA; // CBS ~8.8%
+                        }),
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Evolução PIS/COFINS → CBS'
+                        },
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('pt-BR', {
+                                        style: 'currency',
+                                        currency: 'BRL',
+                                        maximumFractionDigits: 0
+                                    }).format(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Renderizar gráfico ICMS
+        const ctxICMS = document.getElementById('grafico-evolucao-icms');
+        if (ctxICMS) {
+            // Destruir gráfico anterior se existir
+            if (_charts.evolucaoICMS) {
+                _charts.evolucaoICMS.destroy();
+            }
+
+            _charts.evolucaoICMS = new Chart(ctxICMS, {
+                type: 'line',
+                data: {
+                    labels: anos,
+                    datasets: [{
+                        label: 'ICMS Atual',
+                        data: anos.map(ano => {
+                            const percAtual = 1 - cronograma[ano];
+                            return (faturamento * 0.18) * percAtual; // ICMS ~18%
+                        }),
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'IBS (IVA)',
+                        data: anos.map(ano => {
+                            const percIVA = cronograma[ano];
+                            return (faturamento * 0.177) * percIVA; // IBS ~17.7%
+                        }),
+                        borderColor: '#9b59b6',
+                        backgroundColor: 'rgba(155, 89, 182, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Evolução ICMS → IBS'
+                        },
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('pt-BR', {
+                                        style: 'currency',
+                                        currency: 'BRL',
+                                        maximumFractionDigits: 0
+                                    }).format(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Renderizar gráfico IPI
+        const ctxIPI = document.getElementById('grafico-evolucao-ipi');
+        if (ctxIPI) {
+            // Destruir gráfico anterior se existir
+            if (_charts.evolucaoIPI) {
+                _charts.evolucaoIPI.destroy();
+            }
+
+            _charts.evolucaoIPI = new Chart(ctxIPI, {
+                type: 'bar',
+                data: {
+                    labels: anos,
+                    datasets: [{
+                        label: 'IPI Atual',
+                        data: anos.map(ano => {
+                            const percAtual = 1 - cronograma[ano];
+                            return (faturamento * 0.10) * percAtual; // IPI ~10%
+                        }),
+                        backgroundColor: 'rgba(255, 206, 86, 0.7)',
+                        borderColor: 'rgba(255, 206, 86, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Evolução IPI'
+                        },
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('pt-BR', {
+                                        style: 'currency',
+                                        currency: 'BRL',
+                                        maximumFractionDigits: 0
+                                    }).format(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Renderizar gráfico Total
+        const ctxTotal = document.getElementById('grafico-evolucao-total');
+        if (ctxTotal) {
+            // Destruir gráfico anterior se existir
+            if (_charts.evolucaoTotal) {
+                _charts.evolucaoTotal.destroy();
+            }
+
+            _charts.evolucaoTotal = new Chart(ctxTotal, {
+                type: 'bar',
+                data: {
+                    labels: anos,
+                    datasets: [{
+                        label: 'Total de Impostos',
+                        data: anos.map(ano => {
+                            const percIVA = cronograma[ano];
+                            const percAtual = 1 - percIVA;
+                            const sistemaAtual = faturamento * 0.265 * percAtual; // Alíquota média atual
+                            const sistemaIVA = faturamento * 0.265 * percIVA; // IVA equivalente
+                            return sistemaAtual + sistemaIVA;
+                        }),
+                        backgroundColor: '#2ecc71',
+                        borderColor: '#27ae60',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Total de Impostos Durante Transição'
+                        },
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return new Intl.NumberFormat('pt-BR', {
+                                        style: 'currency',
+                                        currency: 'BRL',
+                                        maximumFractionDigits: 0
+                                    }).format(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        console.log('Gráficos de detalhamento renderizados com sucesso');
+    }
+    
     function renderizarGraficoFluxoCaixa(resultados) {
         const canvas = document.getElementById('grafico-fluxo-caixa');
         if (!canvas) {
@@ -1631,6 +1894,7 @@ window.ChartManager = (function() {
     return {
         inicializar,
         renderizarGraficos,
+        renderizarGraficosDetalhamento,
         renderizarGraficoFluxoCaixa,
         renderizarGraficoCapitalGiro,
         renderizarGraficoProjecao,
